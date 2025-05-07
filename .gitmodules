@@ -1,0 +1,3 @@
+[submodule "Data"]
+	path = Data
+	url = https://huggingface.co/datasets/OpenBIEC/ArtifactersGen
