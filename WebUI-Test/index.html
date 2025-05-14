@@ -1,0 +1,168 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Denoising Demo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            color: #fff;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .container {
+            display: flex;
+            justify-content: space-around;
+            width: 80%;
+        }
+        .image-container {
+            text-align: center;
+        }
+        img {
+            max-width: 400px;
+            height: auto;
+            border: 2px solid #00aaff;
+            border-radius: 10px;
+            box-shadow: 0 0 10px #00aaff;
+        }
+        h1 {
+            text-align: center;
+            color: #00aaff;
+            text-shadow: 0 0 5px #00aaff;
+        }
+        #upload-container {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        #status {
+            color: #ffaa00;
+            text-align: center;
+        }
+        input[type="file"] {
+            padding: 10px;
+            background-color: #333;
+            border: 1px solid #00aaff;
+            border-radius: 5px;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <h1>Denoising Process Demo</h1>
+        <div id="upload-container">
+            <input type="file" id="image-upload" accept="image/png" onchange="uploadImage()">
+        </div>
+        <div class="container">
+            <div class="image-container">
+                <h2>Original Image</h2>
+                <img id="original-image" src="" alt="Original Image">
+            </div>
+            <div class="image-container">
+                <h2>Denoising Process</h2>
+                <img id="denoising-image" src="" alt="Denoising Image">
+            </div>
+        </div>
+        <p id="status"></p>
+    </div>
+
+    <script>
+        let denoisingImages = [];
+        let currentIndex = 0;
+        let intervalId;
+
+        function uploadImage() {
+            const fileInput = document.getElementById('image-upload');
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('status').textContent = data.error;
+                    return;
+                }
+                document.getElementById('original-image').src = data.original;
+                denoisingImages = data.denoising_images;
+                currentIndex = 0;
+                startDenoising();
+            })
+            .catch(error => {
+                document.getElementById('status').textContent = 'Error uploading file';
+                console.error(error);
+            });
+        }
+
+        function startDenoising() {
+            clearInterval(intervalId);
+            if (denoisingImages.length === 0) {
+                document.getElementById('status').textContent = 'No denoising images found';
+                return;
+            }
+
+            intervalId = setInterval(() => {
+                if (currentIndex < denoisingImages.length) {
+                    document.getElementById('denoising-image').src = denoisingImages[currentIndex];
+                    document.getElementById('status').textContent = `Processing step ${currentIndex + 1}/${denoisingImages.length}`;
+                    currentIndex++;
+                } else {
+                    clearInterval(intervalId);
+                    document.getElementById('status').textContent = 'Denoising complete';
+                }
+            }, 2000);  // 每2秒切换一次
+        }
+    </script>
+</body>
+</html>
